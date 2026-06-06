@@ -4699,6 +4699,18 @@ audio (0%) or clip B&apos;s audio (100%).</source>
 <context>
     <name>MainWindow</name>
     <message>
+        <location filename="../src/mainwindow.ui" line="201"/>
+        <source>Graphics Adapter</source>
+        <translation>显卡选择</translation>
+    </message>
+    <message>
+        <location filename="../src/mainwindow.cpp" line="5384"/>
+        <source>You must restart Shotcut to change the graphics adapter.
+Do you want to restart now?</source>
+        <translation>您必须重新启动 Shotcut 才能更改显卡。
+您想立即重新启动吗？</translation>
+    </message>
+    <message>
         <location filename="../src/mainwindow.ui" line="14"/>
         <source>Shotcut</source>
         <translation>Shotcut</translation>

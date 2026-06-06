@@ -19,6 +19,7 @@
 #include "FileAppender.h"
 #include "Logger.h"
 #include "mainwindow.h"
+#include "gpuinfo.h"
 #include "settings.h"
 
 #include <framework/mlt_log.h>
@@ -423,6 +424,24 @@ int main(int argc, char **argv)
 
     Application a(argc, argv);
     int result = EXIT_SUCCESS;
+#ifdef Q_OS_WIN
+    // Direct the Qt RHI (Direct3D) to render the preview/UI on the user-selected
+    // physical GPU. This must be set before the RHI is initialized (it is read lazily
+    // when the first scene-graph window is created). In release builds the watchdog
+    // child process inherits this environment from its parent. A value already set in
+    // the environment by the user takes precedence. The adapter index is resolved live
+    // from the GPU's stable vendor+device identity because some drivers enumerate
+    // adapters in an unstable order across runs. See gpuinfo.cpp and Settings.
+    {
+        const uint gpuVendorId = Settings.gpuAdapterVendorId();
+        if (gpuVendorId != 0 && !qEnvironmentVariableIsSet("QT_D3D_ADAPTER_INDEX")) {
+            const int gpuAdapterIndex = gpuAdapterIndexFor(gpuVendorId,
+                                                           Settings.gpuAdapterDeviceId());
+            if (gpuAdapterIndex >= 0)
+                ::qputenv("QT_D3D_ADAPTER_INDEX", QByteArray::number(gpuAdapterIndex));
+        }
+    }
+#endif
 #ifdef QT_DEBUG
     ::qputenv(kWatchdogEnvVar, "1");
 #endif

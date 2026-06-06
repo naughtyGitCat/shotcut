@@ -23,6 +23,7 @@
 #include "dialogs/listselectiondialog.h"
 #include "dialogs/multifileexportdialog.h"
 #include "findanalysisfilterparser.h"
+#include "gpuinfo.h"
 #include "jobqueue.h"
 #include "jobs/encodejob.h"
 #include "mainwindow.h"
@@ -174,8 +175,14 @@ EncodeDock::EncodeDock(QWidget *parent)
     ui->videoCodecCombo->model()->sort(0);
     ui->videoCodecCombo->insertItem(0, tr("Default for format"));
 
-    ui->hwencodeCheckBox->setChecked(Settings.encodeUseHardware()
-                                     && !Settings.encodeHardware().isEmpty());
+    bool useHardwareEncode = Settings.encodeUseHardware() && !Settings.encodeHardware().isEmpty();
+    // If the user selected a specific GPU and never explicitly configured hardware
+    // encoding, default it on so the chosen GPU is actually used for export. Once the
+    // user toggles the checkbox, that saved preference is honored from then on.
+    if (!Settings.encodeUseHardwareWasSet() && Settings.gpuAdapterVendorId() != 0
+        && !Settings.encodeHardware().isEmpty())
+        useHardwareEncode = true;
+    ui->hwencodeCheckBox->setChecked(useHardwareEncode);
     ui->hwdecodeCheckBox->setChecked(Settings.encodeHardwareDecoder());
 
     on_resetButton_clicked();
@@ -211,15 +218,51 @@ void EncodeDock::loadPresetFromProperties(Mlt::Properties &preset)
     ui->metaLanguageLineEdit->clear();
 
     if (ui->hwencodeCheckBox->isChecked()) {
-        foreach (const QString &hw, Settings.encodeHardware()) {
-            if ((vcodec == "libx264" && hw.startsWith("h264"))
-                || (vcodec == "libx265" && hw.startsWith("hevc"))
-                || (vcodec == "libvpx-vp9" && hw.startsWith("vp9"))
-                || (vcodec == "libsvtav1" && hw.startsWith("av1"))) {
-                vcodec = hw;
-                break;
+        auto matchesType = [&vcodec](const QString &hw) {
+            return (vcodec == "libx264" && hw.startsWith("h264"))
+                   || (vcodec == "libx265" && hw.startsWith("hevc"))
+                   || (vcodec == "libvpx-vp9" && hw.startsWith("vp9"))
+                   || (vcodec == "libsvtav1" && hw.startsWith("av1"));
+        };
+        // Prefer the hardware encoder family that matches the user-selected GPU
+        // vendor (NVIDIA -> *_nvenc, AMD -> *_amf, Intel -> *_qsv). This makes
+        // selecting the discrete NVIDIA GPU drive export through NVENC even when an
+        // AMD (AMF) encoder also passed detection and happens to come first in the
+        // list. Falls back to the first type-compatible encoder when no preferred
+        // family is configured or available.
+        QString preferredSuffix;
+        switch (Settings.gpuAdapterVendorId()) {
+        case kGpuVendorNvidia:
+            preferredSuffix = "_nvenc";
+            break;
+        case kGpuVendorAmd:
+            preferredSuffix = "_amf";
+            break;
+        case kGpuVendorIntel:
+            preferredSuffix = "_qsv";
+            break;
+        default:
+            break;
+        }
+        QString chosen;
+        if (!preferredSuffix.isEmpty()) {
+            foreach (const QString &hw, Settings.encodeHardware()) {
+                if (matchesType(hw) && hw.endsWith(preferredSuffix)) {
+                    chosen = hw;
+                    break;
+                }
             }
         }
+        if (chosen.isEmpty()) {
+            foreach (const QString &hw, Settings.encodeHardware()) {
+                if (matchesType(hw)) {
+                    chosen = hw;
+                    break;
+                }
+            }
+        }
+        if (!chosen.isEmpty())
+            vcodec = chosen;
     }
 
     ui->disableAudioCheckbox->setChecked(preset.get_int("an"));
