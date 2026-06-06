@@ -20,6 +20,49 @@
 #include <QSet>
 #include <QtGlobal>
 
+// Platform-independent: pick the hardware encoder matching the GPU vendor, with a
+// fallback to the first type-compatible encoder. Kept out of the Windows-only block
+// so it builds and is unit-testable everywhere.
+QString preferredHardwareVcodec(const QStringList &hardwareCodecs,
+                                const QString &softwareVcodec,
+                                uint vendorId)
+{
+    auto matchesType = [&softwareVcodec](const QString &hw) {
+        return (softwareVcodec == QLatin1String("libx264") && hw.startsWith(QLatin1String("h264")))
+               || (softwareVcodec == QLatin1String("libx265")
+                   && hw.startsWith(QLatin1String("hevc")))
+               || (softwareVcodec == QLatin1String("libvpx-vp9")
+                   && hw.startsWith(QLatin1String("vp9")))
+               || (softwareVcodec == QLatin1String("libsvtav1")
+                   && hw.startsWith(QLatin1String("av1")));
+    };
+    QString preferredSuffix;
+    switch (vendorId) {
+    case kGpuVendorNvidia:
+        preferredSuffix = QStringLiteral("_nvenc");
+        break;
+    case kGpuVendorAmd:
+        preferredSuffix = QStringLiteral("_amf");
+        break;
+    case kGpuVendorIntel:
+        preferredSuffix = QStringLiteral("_qsv");
+        break;
+    default:
+        break;
+    }
+    if (!preferredSuffix.isEmpty()) {
+        for (const QString &hw : hardwareCodecs) {
+            if (matchesType(hw) && hw.endsWith(preferredSuffix))
+                return hw;
+        }
+    }
+    for (const QString &hw : hardwareCodecs) {
+        if (matchesType(hw))
+            return hw;
+    }
+    return QString();
+}
+
 #ifdef Q_OS_WIN
 #include <dxgi.h>
 

@@ -218,49 +218,13 @@ void EncodeDock::loadPresetFromProperties(Mlt::Properties &preset)
     ui->metaLanguageLineEdit->clear();
 
     if (ui->hwencodeCheckBox->isChecked()) {
-        auto matchesType = [&vcodec](const QString &hw) {
-            return (vcodec == "libx264" && hw.startsWith("h264"))
-                   || (vcodec == "libx265" && hw.startsWith("hevc"))
-                   || (vcodec == "libvpx-vp9" && hw.startsWith("vp9"))
-                   || (vcodec == "libsvtav1" && hw.startsWith("av1"));
-        };
-        // Prefer the hardware encoder family that matches the user-selected GPU
-        // vendor (NVIDIA -> *_nvenc, AMD -> *_amf, Intel -> *_qsv). This makes
-        // selecting the discrete NVIDIA GPU drive export through NVENC even when an
-        // AMD (AMF) encoder also passed detection and happens to come first in the
-        // list. Falls back to the first type-compatible encoder when no preferred
-        // family is configured or available.
-        QString preferredSuffix;
-        switch (Settings.gpuAdapterVendorId()) {
-        case kGpuVendorNvidia:
-            preferredSuffix = "_nvenc";
-            break;
-        case kGpuVendorAmd:
-            preferredSuffix = "_amf";
-            break;
-        case kGpuVendorIntel:
-            preferredSuffix = "_qsv";
-            break;
-        default:
-            break;
-        }
-        QString chosen;
-        if (!preferredSuffix.isEmpty()) {
-            foreach (const QString &hw, Settings.encodeHardware()) {
-                if (matchesType(hw) && hw.endsWith(preferredSuffix)) {
-                    chosen = hw;
-                    break;
-                }
-            }
-        }
-        if (chosen.isEmpty()) {
-            foreach (const QString &hw, Settings.encodeHardware()) {
-                if (matchesType(hw)) {
-                    chosen = hw;
-                    break;
-                }
-            }
-        }
+        // Prefer the hardware encoder family that matches the user-selected GPU vendor
+        // (NVIDIA -> *_nvenc, AMD -> *_amf, Intel -> *_qsv) so that selecting the
+        // discrete NVIDIA GPU drives export through NVENC even when an AMD (AMF) encoder
+        // also passed detection and happens to come first. See gpuinfo.cpp.
+        const QString chosen = preferredHardwareVcodec(Settings.encodeHardware(),
+                                                       vcodec,
+                                                       Settings.gpuAdapterVendorId());
         if (!chosen.isEmpty())
             vcodec = chosen;
     }

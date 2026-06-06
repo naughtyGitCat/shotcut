@@ -20,6 +20,7 @@
 
 #include <QList>
 #include <QString>
+#include <QStringList>
 
 // PCI vendor ids of the common GPU vendors.
 enum GpuVendorId {
@@ -47,5 +48,14 @@ QList<GpuAdapterInfo> enumerateGpuAdapters();
 // in an unstable order across runs, so the index must be resolved live at startup from
 // the GPU's stable identity rather than persisted from a previous session.
 int gpuAdapterIndexFor(uint vendorId, uint deviceId);
+
+// Choose the hardware video encoder for a given software codec, preferring the encoder
+// family matching the selected GPU vendor (NVIDIA->*_nvenc, AMD->*_amf, Intel->*_qsv)
+// and otherwise falling back to the first type-compatible encoder in hardwareCodecs.
+// Returns an empty string when no compatible hardware encoder is available. This is a
+// pure, platform-independent function so it can be unit tested.
+QString preferredHardwareVcodec(const QStringList &hardwareCodecs,
+                                const QString &softwareVcodec,
+                                uint vendorId);
 
 #endif // GPUINFO_H
